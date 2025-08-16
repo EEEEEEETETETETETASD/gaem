@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAEM - Networked Multiplayer Puzzle Platformer</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+            font-family: 'Courier New', monospace;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            width: 100%;
+            box-shadow: 0 4px 15px rgba(0, 255, 0, 0.3);
+        }
+        
+        .header h1 {
+            font-size: 4em;
+            margin: 0;
+            color: #00ff41;
+            text-shadow: 0 0 20px #00ff41, 0 0 40px #00ff41;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { text-shadow: 0 0 20px #00ff41, 0 0 30px #00ff41, 0 0 40px #00ff41; }
+            to { text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41, 0 0 30px #00ff41; }
+        }
+        
+        .connection-panel {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ff41;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px;
+            min-width: 400px;
+            box-shadow: 0 0 30px rgba(0, 255, 65, 0.3);
+            text-align: center;
+        }
+        
+        .game-container {
+            display: none;
+            position: relative;
+            border: 3px solid #00ff41;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0, 255, 65, 0.5);
+            margin: 20px;
+        }
+        
+        canvas {
+            display: block;
+            background: linear-gradient(180deg, #001122, #000511);
+        }
+        
+        .hud {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #00ff41;
+            min-width: 200px;
+        }
+        
+        .level-info {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #00ff41;
+            text-align: right;
+            max-width: 300px;
+        }
+        
+        .player-info {
+            margin: 5px 0;
+            font-weight: bold;
+            font-size: 14px;
+            padding: 5px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        input, select, button {
+            background: rgba(0, 0, 0, 0.7);
+            color: #00ff41;
+            border: 2px solid #00ff41;
+            padding: 12px 20px;
+            margin: 8px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        button {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: linear-gradient(45deg, #00ff41, #00cc33);
+            color: black;
+        }
+        
+        button:hover {
+            background: linear-gradient(45deg, #00cc33, #009922);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 255, 65, 0.4);
+        }
+        
+        button:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .room-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #00ff41;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        
+        .room-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(0, 255, 65, 0.1);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .room-item:hover {
+            background: rgba(0, 255, 65, 0.2);
+            transform: translateX(5px);
+        }
+        
+        .controls-info {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            right: 15px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #00ff41;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        .key {
+            background: rgba(0, 255, 65, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 0 2px;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: rgba(0, 255, 65, 0.2);
+            border: 1px solid #00ff41;
+            color: #00ff41;
+        }
+        
+        .status.error {
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff0041;
+            color: #ff0041;
+        }
+        
+        .status.info {
+            background: rgba(0, 100, 255, 0.2);
+            border: 1px solid #0064ff;
+            color: #0064ff;
+        }
+        
+        .level-complete {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.95);
+            border: 3px solid #00ff41;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(0, 255, 65, 0.8);
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff41, #00cc33);
+            transition: width 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>GAEM</h1>
+        <p>🌐 Networked Multiplayer Puzzle Platformer 🌐</p>
+        <p>Each player connects from their own device!</p>
+    </div>
+    
+    <!-- Connection Panel -->
+    <div class="connection-panel" id="connectionPanel">
+        <h2>🔗 Connect to Game</h2>
+        
+        <div class="status info" id="connectionStatus">
+            Ready to connect...
+        </div>
+        
+        <div>
+            <input type="text" id="roomIdInput" placeholder="Enter Room ID (1-999)" maxlength="3">
+            <button onclick="joinRoom()">Join Room</button>
+            <button onclick="createRoom()">Create New Room</button>
+        </div>
+        
+        <button onclick="refreshRooms()">🔄 Refresh Room List</button>
+        
+        <div class="room-list" id="roomList">
+            <p>Loading available rooms...</p>
+        </div>
+        
+        <div style="margin-top: 20px; font-size: 14px; opacity: 0.8;">
+            <p><strong>How to Play:</strong></p>
+            <p>1. Create a room or join an existing one</p>
+            <p>2. Share the Room ID with friends</p>
+            <p>3. Each player joins from their own device</p>
+            <p>4. Work together to solve 10 increasingly difficult puzzle levels!</p>
+        </div>
+    </div>
+    
+    <!-- Game Container -->
+    <div class="game-container" id="gameContainer">
+        <canvas id="gameCanvas" width="1200" height="700"></canvas>
+        
+        <!-- HUD -->
+        <div class="hud">
+            <div id="playerInfo">
+                <div style="color: #00ff41; font-size: 16px; margin-bottom: 10px;">
+                    🎮 <span id="playerName">Loading...</span>
+                </div>
+                <div id="roomInfo">Room: <span id="currentRoom">-</span></div>
+                <div id="playerCount">Players: <span id="playerCountNum">0</span>/4</div>
+            </div>
+            
+            <div style="margin-top: 15px; border-top: 1px solid #00ff41; padding-top: 15px;">
+                <div id="playersInRoom">
+                    <!-- Player list will be populated here -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Level Info -->
+        <div class="level-info">
+            <div style="color: #00ff41; font-size: 18px; margin-bottom: 10px;">
+                📍 Level <span id="currentLevel">1</span>/10
+            </div>
+            <div style="font-size: 16px; margin-bottom: 5px;">
+                <strong id="levelName">Loading...</strong>
+            </div>
+            <div style="font-size: 12px; opacity: 0.9;">
+                <span id="levelDescription">Loading level...</span>
+            </div>
+            
+            <div class="progress-bar" style="margin-top: 15px;">
+                <div class="progress-fill" id="levelProgress" style="width: 10%;"></div>
+            </div>
+            <div style="font-size: 12px; margin-top: 5px;">
+                Progress: <span id="progressText">Level 1 of 10</span>
+            </div>
+        </div>
+        
+        <!-- Controls Info -->
+        <div class="controls-info">
+            <div style="margin-bottom: 10px;">
+                <strong>🎮 Your Controls:</strong>
+                <span class="key">← → ↑ ↓</span> Move & Jump
+                <span class="key">WASD</span> Alternative Movement
+                <span class="key">SPACE</span> Jump
+            </div>
+            <div style="font-size: 10px; opacity: 0.7;">
+                <strong>Legend:</strong>
+                🟢 Platform | 🔴 Switch | 🔵 Door | 🟡 Exit
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ULTRA ROBUST NETWORKED MULTIPLAYER CLIENT
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let socket = null;
+        let myPlayer = null;
+        let gameState = null;
+        let keys = {
+            left: false,
+            right: false,
+            jump: false
+        };
+        
+        // Network connection
+        function connectToServer() {
+            socket = io();
+            
+            socket.on('connect', () => {
+                updateConnectionStatus('Connected to server!', 'success');
+                refreshRooms();
+            });
+            
+            socket.on('disconnect', () => {
+                updateConnectionStatus('Disconnected from server', 'error');
+                showConnectionPanel();
+            });
+            
+            socket.on('playerJoined', (player) => {
+                myPlayer = player;
+                updateConnectionStatus(`Welcome ${player.name}!`, 'success');
+                showGameScreen();
+            });
+            
+            socket.on('roomFull', () => {
+                updateConnectionStatus('Room is full! (Max 4 players)', 'error');
+            });
+            
+            socket.on('gameState', (state) => {
+                gameState = state;
+                updateUI();
+                render();
+            });
+            
+            socket.on('levelCompleted', (data) => {
+                showLevelComplete(data.level, data.nextLevel, data.message);
+            });
+            
+            socket.on('gameCompleted', (data) => {
+                showGameComplete(data.message, data.totalTime);
+            });
+            
+            socket.on('roomList', (rooms) => {
+                updateRoomList(rooms);
+            });
+        }
+        
+        function joinRoom() {
+            const roomId = document.getElementById('roomIdInput').value.trim();
+            if (!roomId || isNaN(roomId) || roomId < 1 || roomId > 999) {
+                updateConnectionStatus('Please enter a valid Room ID (1-999)', 'error');
+                return;
+            }
+            
+            if (socket) {
+                updateConnectionStatus(`Joining Room ${roomId}...`, 'info');
+                socket.emit('joinRoom', parseInt(roomId));
+            } else {
+                updateConnectionStatus('Not connected to server!', 'error');
+            }
+        }
+        
+        function createRoom() {
+            const roomId = Math.floor(Math.random() * 900) + 100; // Random 3-digit room ID
+            document.getElementById('roomIdInput').value = roomId;
+            joinRoom();
+        }
+        
+        function refreshRooms() {
+            if (socket) {
+                socket.emit('requestRoomList');
+            }
+        }
+        
+        function updateConnectionStatus(message, type) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+        
+        function showConnectionPanel() {
+            document.getElementById('connectionPanel').style.display = 'block';
+            document.getElementById('gameContainer').style.display = 'none';
+        }
+        
+        function showGameScreen() {
+            document.getElementById('connectionPanel').style.display = 'none';
+            document.getElementById('gameContainer').style.display = 'block';
+        }
+        
+        function updateRoomList(rooms) {
+            const roomListEl = document.getElementById('roomList');
+            
+            if (rooms.length === 0) {
+                roomListEl.innerHTML = '<p style="opacity: 0.6;">No available rooms found</p>';
+                return;
+            }
+            
+            let html = '<h3>Available Rooms:</h3>';
+            rooms.forEach(room => {
+                const statusText = room.gameState === 'waiting' ? '⏳ Waiting for players' : 
+                                 room.gameState === 'playing' ? '🎮 In Progress' : '✅ Completed';
+                
+                html += `
+                    <div class="room-item" onclick="joinRoomById(${room.id})">
+                        <strong>Room ${room.id}</strong> - ${room.playerCount}/${room.maxPlayers} players<br>
+                        <small>Level ${room.currentLevel} - ${statusText}</small>
+                    </div>
+                `;
+            });
+            
+            roomListEl.innerHTML = html;
+        }
+        
+        function joinRoomById(roomId) {
+            document.getElementById('roomIdInput').value = roomId;
+            joinRoom();
+        }
+        
+        function updateUI() {
+            if (!gameState || !myPlayer) return;
+            
+            // Update player info
+            document.getElementById('playerName').textContent = myPlayer.name;
+            document.getElementById('currentRoom').textContent = gameState.roomId;
+            document.getElementById('playerCountNum').textContent = gameState.players.length;
+            
+            // Update level info
+            document.getElementById('currentLevel').textContent = gameState.currentLevel;
+            document.getElementById('levelName').textContent = gameState.levelName;
+            document.getElementById('levelDescription').textContent = gameState.levelDescription;
+            document.getElementById('progressText').textContent = `Level ${gameState.currentLevel} of 10`;
+            document.getElementById('levelProgress').style.width = `${(gameState.currentLevel / 10) * 100}%`;
+            
+            // Update players list
+            const playersListEl = document.getElementById('playersInRoom');
+            let playersHtml = '<div style="font-size: 12px; margin-bottom: 5px; color: #00ff41;">👥 Players in Room:</div>';
+            
+            gameState.players.forEach(player => {
+                const isMe = player.id === myPlayer.id;
+                playersHtml += `
+                    <div class="player-info" style="color: ${player.color}; opacity: ${isMe ? '1' : '0.8'};">
+                        ${isMe ? '👤 ' : '🎮 '}${player.name} ${isMe ? '(You)' : ''}
+                    </div>
+                `;
+            });
+            
+            playersListEl.innerHTML = playersHtml;
+        }
+        
+        function showLevelComplete(completedLevel, nextLevel, message) {
+            // Show level complete overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'level-complete';
+            overlay.innerHTML = `
+                <h2 style="color: #00ff41; margin-bottom: 20px;">🎉 Level Complete!</h2>
+                <p style="font-size: 18px; margin-bottom: 15px;">${message}</p>
+                <div style="margin: 20px 0;">
+                    <div style="font-size: 14px; opacity: 0.8;">Moving to next level in 3 seconds...</div>
+                </div>
+            `;
+            
+            document.getElementById('gameContainer').appendChild(overlay);
+            
+            // Remove overlay after 3 seconds
+            setTimeout(() => {
+                overlay.remove();
+            }, 3000);
+        }
+        
+        function showGameComplete(message, totalTime) {
+            const overlay = document.createElement('div');
+            overlay.className = 'level-complete';
+            overlay.innerHTML = `
+                <h2 style="color: #00ff41; margin-bottom: 20px;">🏆 GAME COMPLETED!</h2>
+                <p style="font-size: 18px; margin-bottom: 15px;">${message}</p>
+                <p style="font-size: 16px; margin: 20px 0;">
+                    Congratulations on completing all 10 levels through teamwork!
+                </p>
+                <button onclick="location.reload()" style="margin-top: 20px;">
+                    🎮 Play Again
+                </button>
+            `;
+            
+            document.getElementById('gameContainer').appendChild(overlay);
+        }
+        
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            if (document.getElementById('connectionPanel').style.display !== 'none') return;
+            
+            switch(e.code) {
+                case 'ArrowLeft':
+                case 'KeyA':
+                    keys.left = true;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    keys.right = true;
+                    break;
+                case 'ArrowUp':
+                case 'KeyW':
+                case 'Space':
+                    keys.jump = true;
+                    e.preventDefault(); // Prevent page scroll
+                    break;
+            }
+            
+            if (socket) {
+                socket.emit('playerInput', keys);
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (document.getElementById('connectionPanel').style.display !== 'none') return;
+            
+            switch(e.code) {
+                case 'ArrowLeft':
+                case 'KeyA':
+                    keys.left = false;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    keys.right = false;
+                    break;
+                case 'ArrowUp':
+                case 'KeyW':
+                case 'Space':
+                    keys.jump = false;
+                    break;
+            }
+            
+            if (socket) {
+                socket.emit('playerInput', keys);
+            }
+        });
+        
+        // Enter key to join room
+        document.getElementById('roomIdInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                joinRoom();
+            }
+        });
+        
+        // Rendering
+        function render() {
+            if (!gameState) return;
+            
+            const TILE_SIZE = 40;
+            
+            // Clear canvas
+            ctx.fillStyle = '#000511';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw level
+            if (gameState.level) {
+                // Draw platforms
+                if (gameState.level.platforms) {
+                    gameState.level.platforms.forEach(platform => {
+                        ctx.fillStyle = '#00aa44';
+                        ctx.fillRect(platform.x * TILE_SIZE, platform.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(platform.x * TILE_SIZE, platform.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    });
+                }
+                
+                // Draw switches
+                if (gameState.switches) {
+                    gameState.switches.forEach(switchObj => {
+                        ctx.fillStyle = switchObj.active ? '#ff6666' : '#cc0000';
+                        ctx.fillRect(switchObj.x * TILE_SIZE, switchObj.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(switchObj.x * TILE_SIZE, switchObj.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                        
+                        // Draw switch indicator
+                        ctx.fillStyle = 'white';
+                        ctx.font = '12px Courier New';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('S', switchObj.x * TILE_SIZE + TILE_SIZE/2, switchObj.y * TILE_SIZE + TILE_SIZE/2 + 4);
+                    });
+                }
+                
+                // Draw doors
+                if (gameState.doors) {
+                    gameState.doors.forEach(door => {
+                        if (!door.open) {
+                            ctx.fillStyle = '#0066cc';
+                            ctx.fillRect(door.x * TILE_SIZE, door.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                            ctx.strokeStyle = '#ffffff';
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(door.x * TILE_SIZE, door.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                            
+                            // Draw door indicator
+                            ctx.fillStyle = 'white';
+                            ctx.font = '12px Courier New';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('D', door.x * TILE_SIZE + TILE_SIZE/2, door.y * TILE_SIZE + TILE_SIZE/2 + 4);
+                        }
+                    });
+                }
+                
+                // Draw exit
+                if (gameState.level.exit) {
+                    ctx.fillStyle = '#ffcc00';
+                    ctx.fillRect(gameState.level.exit.x * TILE_SIZE, gameState.level.exit.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(gameState.level.exit.x * TILE_SIZE, gameState.level.exit.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    
+                    // Draw EXIT text
+                    ctx.fillStyle = 'black';
+                    ctx.font = '10px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('EXIT', gameState.level.exit.x * TILE_SIZE + TILE_SIZE/2, gameState.level.exit.y * TILE_SIZE + TILE_SIZE/2 + 3);
+                }
+            }
+            
+            // Draw players
+            if (gameState.players) {
+                gameState.players.forEach(player => {
+                    // Draw player
+                    ctx.fillStyle = player.color;
+                    ctx.fillRect(player.x, player.y, 20, 20);
+                    
+                    // Draw outline
+                    ctx.strokeStyle = player.id === myPlayer.id ? '#ffffff' : '#cccccc';
+                    ctx.lineWidth = player.id === myPlayer.id ? 3 : 2;
+                    ctx.strokeRect(player.x, player.y, 20, 20);
+                    
+                    // Draw name
+                    ctx.fillStyle = 'white';
+                    ctx.font = '12px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(player.name, player.x + 10, player.y - 5);
+                    
+                    // Highlight own player
+                    if (player.id === myPlayer.id) {
+                        ctx.strokeStyle = '#00ff41';
+                        ctx.lineWidth = 1;
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeRect(player.x - 5, player.y - 5, 30, 30);
+                        ctx.setLineDash([]);
+                    }
+                });
+            }
+        }
+        
+        // Game loop
+        function gameLoop() {
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Initialize
+        connectToServer();
+        gameLoop();
+        
+        // Auto-refresh room list every 10 seconds
+        setInterval(refreshRooms, 10000);
+    </script>
+</body>
+</html>
